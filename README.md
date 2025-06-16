@@ -16,9 +16,8 @@ CORS is a node.js package for providing a [Connect](http://www.senchalabs.org/co
   * [Configuring CORS](#configuring-cors)
   * [Configuring CORS w/ Dynamic Origin](#configuring-cors-w-dynamic-origin)
   * [Enabling CORS Pre-Flight](#enabling-cors-pre-flight)
-  * [Configuring CORS Asynchronously](#configuring-cors-asynchronously)
+  * [Customizing CORS Settings Dynamically per Request](#customizing-cors-settings-dynamically-per-request)
 * [Configuration Options](#configuration-options)
-* [Demo](#demo)
 * [License](#license)
 * [Author](#author)
 
@@ -69,6 +68,8 @@ app.listen(80, function () {
 ```
 
 ### Configuring CORS
+
+See the [configuration options](#configuration-options) for details.
 
 ```javascript
 var express = require('express')
@@ -162,27 +163,45 @@ NOTE: When using this middleware as an application level middleware (for
 example, `app.use(cors())`), pre-flight requests are already handled for all
 routes.
 
-### Configuring CORS Asynchronously
+### Customizing CORS Settings Dynamically per Request
+
+For APIs that require different CORS configurations for specific routes or requests, you can dynamically generate CORS options based on the incoming request. The `cors` middleware allows you to achieve this by passing a function instead of static options. This function is called for each incoming request and must use the callback pattern to return the appropriate CORS options.
+
+The function accepts:
+1. **`req`**: 
+   - The incoming request object.
+
+2. **`callback(error, corsOptions)`**: 
+   - A function used to return the computed CORS options.
+   - **Arguments**:
+     - **`error`**: Pass `null` if there’s no error, or an error object to indicate a failure.
+     - **`corsOptions`**: An object specifying the CORS policy for the current request.
+
+Here’s an example that handles both public routes and restricted, credential-sensitive routes:
 
 ```javascript
-var express = require('express')
-var cors = require('cors')
-var app = express()
-
-var allowlist = ['http://example1.com', 'http://example2.com']
-var corsOptionsDelegate = function (req, callback) {
+var dynamicCorsOptions = function(req, callback) {
   var corsOptions;
-  if (allowlist.indexOf(req.header('Origin')) !== -1) {
-    corsOptions = { origin: true } // reflect (enable) the requested origin in the CORS response
+  if (req.path.startsWith('/auth/connect/')) {
+    corsOptions = {
+      origin: 'http://mydomain.com', // Allow only a specific origin
+      credentials: true,            // Enable cookies and credentials
+    };
   } else {
-    corsOptions = { origin: false } // disable CORS for this request
+    corsOptions = { origin: '*' };   // Allow all origins for other routes
   }
-  callback(null, corsOptions) // callback expects two parameters: error and options
-}
+  callback(null, corsOptions);
+};
 
-app.get('/products/:id', cors(corsOptionsDelegate), function (req, res, next) {
-  res.json({msg: 'This is CORS-enabled for an allowed domain.'})
-})
+app.use(cors(dynamicCorsOptions));
+
+app.get('/auth/connect/twitter', function (req, res) {
+  res.send('CORS dynamically applied for Twitter authentication.');
+});
+
+app.get('/public', function (req, res) {
+  res.send('Public data with open CORS.');
+});
 
 app.listen(80, function () {
   console.log('CORS-enabled web server listening on port 80')
@@ -193,7 +212,9 @@ app.listen(80, function () {
 
 * `origin`: Configures the **Access-Control-Allow-Origin** CORS header. Possible values:
   - `Boolean` - set `origin` to `true` to reflect the [request origin](http://tools.ietf.org/html/draft-abarth-origin-09), as defined by `req.header('Origin')`, or set it to `false` to disable CORS.
-  - `String` - set `origin` to a specific origin. For example if you set it to `"http://example.com"` only requests from "http://example.com" will be allowed.
+  - `String` - set `origin` to a specific origin. For example, if you set it to
+    - `"http://example.com"` only requests from "http://example.com" will be allowed.
+    - `"*"` for all domains to be allowed. 
   - `RegExp` - set `origin` to a regular expression pattern which will be used to test the request origin. If it's a match, the request origin will be reflected. For example the pattern `/example\.com$/` will reflect any request that is coming from an origin ending with "example.com".
   - `Array` - set `origin` to an array of valid origins. Each origin can be a `String` or a `RegExp`. For example `["http://example1.com", /\.example2\.com$/]` will accept any request from "http://example1.com" or from a subdomain of "example2.com".
   - `Function` - set `origin` to a function implementing some custom logic. The function takes the request origin as the first parameter and a callback (called as `callback(err, origin)`, where `origin` is a non-function value of the `origin` option) as the second.
@@ -218,15 +239,6 @@ The default configuration is the equivalent of:
 
 For details on the effect of each CORS header, read [this](https://web.dev/cross-origin-resource-sharing/) article on web.dev.
 
-## Demo
-
-A demo that illustrates CORS working (and not working) using React is available here: [https://node-cors-client.netlify.com](https://node-cors-client.netlify.com)
-
-Code for that demo can be found here:
-
-* Client: [https://github.com/troygoode/node-cors-client](https://github.com/troygoode/node-cors-client)
-* Server: [https://github.com/troygoode/node-cors-server](https://github.com/troygoode/node-cors-server)
-
 ## License
 
 [MIT License](http://www.opensource.org/licenses/mit-license.php)
@@ -239,7 +251,7 @@ Code for that demo can be found here:
 [coveralls-url]: https://coveralls.io/r/expressjs/cors?branch=master
 [downloads-image]: https://img.shields.io/npm/dm/cors.svg
 [downloads-url]: https://npmjs.org/package/cors
-[github-actions-ci-image]: https://img.shields.io/github/workflow/status/expressjs/cors/ci/master?label=ci
+[github-actions-ci-image]: https://img.shields.io/github/actions/workflow/status/expressjs/cors/ci.yml?branch=master&label=ci
 [github-actions-ci-url]: https://github.com/expressjs/cors?query=workflow%3Aci
 [npm-image]: https://img.shields.io/npm/v/cors.svg
 [npm-url]: https://npmjs.org/package/cors
